@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<title>Labour Hisab</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f6f8;color:#222}
+header{background:#111827;color:white;padding:18px 16px;text-align:center;font-size:24px;font-weight:700}
+.container{max-width:650px;margin:auto;padding:14px}
+.card{background:white;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px #00000012}
+h2{margin:0 0 12px;font-size:20px}
+input,button{font:inherit}
+input{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:10px;margin:5px 0 10px}
+button{border:0;border-radius:10px;padding:12px 14px;font-weight:700;cursor:pointer}
+.add{background:#111827;color:white;width:100%}
+.date{display:flex;gap:8px;align-items:center}
+.date input{margin:0}
+.labour{border:1px solid #e5e7eb;border-radius:14px;padding:12px;margin:10px 0}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.name{font-size:18px;font-weight:700}
+.wage{color:#6b7280;font-size:14px}
+.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
+.present{background:#16a34a;color:white}.absent{background:#ef4444;color:white}.half{background:#f59e0b;color:white}
+.selected{outline:3px solid #111827}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.stat{background:#f3f4f6;border-radius:12px;padding:12px}
+.stat b{display:block;font-size:20px}
+.small{font-size:12px;color:#6b7280}
+.empty{text-align:center;color:#6b7280;padding:20px}
+.delete{background:#fee2e2;color:#b91c1c;padding:7px 10px;font-size:12px}
+.payrow{display:flex;gap:8px;align-items:center;margin-top:8px}
+.payrow input{margin:0}
+.pay{background:#2563eb;color:white;white-space:nowrap}
+</style>
+</head>
+<body>
+<header>👷 Labour Hisab</header>
+<div class="container">
+
+<div class="card">
+  <h2>➕ Add Labour</h2>
+  <input id="name" placeholder="Labour name">
+  <input id="wage" type="number" min="0" placeholder="Daily wage (₹)">
+  <button class="add" onclick="addLabour()">Add Labour</button>
+</div>
+
+<div class="card">
+  <h2>📅 Today's Attendance</h2>
+  <div class="date"><input id="date" type="date" onchange="render()"></div>
+  <div id="attendance"></div>
+</div>
+
+<div class="card">
+  <h2>📊 Today</h2>
+  <div class="summary">
+    <div class="stat"><b id="present">0</b><span class="small">Present</span></div>
+    <div class="stat"><b id="absent">0</b><span class="small">Absent</span></div>
+    <div class="stat"><b id="todayWage">₹0</b><span class="small">Wage</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>💰 Wage Hisab</h2>
+  <div id="wages"></div>
+</div>
+
+</div>
+
+<script>
+const KEY='labour_hisab_v1';
+let data=JSON.parse(localStorage.getItem(KEY)||'{"labours":[],"attendance":{},"paid":{}}');
+const today=new Date().toISOString().slice(0,10);
+document.getElementById('date').value=today;
+
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function addLabour(){
+  const name=document.getElementById('name').value.trim();
+  const wage=Number(document.getElementById('wage').value);
+  if(!name||!wage){alert('Name aur daily wage dono bharo.');return}
+  data.labours.push({id:Date.now(),name,wage});
+  document.getElementById('name').value='';
+  document.getElementById('wage').value='';
+  save();render();
+}
+function setAtt(id,status){
+  const d=document.getElementById('date').value;
+  if(!data.attendance[d]) data.attendance[d]={};
+  data.attendance[d][id]=status;
+  save();render();
+}
+function removeLabour(id){
+  if(confirm('Is labour ko delete karna hai?')){
+    data.labours=data.labours.filter(x=>x.id!==id);
+    save();render();
+  }
+}
+function status(id){
+  const d=document.getElementById('date').value;
+  return (data.attendance[d]||{})[id]||'';
+}
+function earned(l){
+  let total=0;
+  for(const d in data.attendance){
+    const s=data.attendance[d][l.id];
+    if(s==='present') total+=l.wage;
+    if(s==='half') total+=l.wage/2;
+  }
+  return total;
+}
+function paid(l){return Number(data.paid[l.id]||0)}
+function addPayment(id){
+  const v=Number(prompt('Kitna paisa diya?'));
+  if(!v||v<0)return;
+  data.paid[id]=(data.paid[id]||0)+v;
+  save();render();
+}
+function render(){
+  const d=document.getElementById('date').value;
+  const att=data.attendance[d]||{};
+  let p=0,a=0,w=0;
+  let box=document.getElementById('attendance');
+  if(!data.labours.length) box.innerHTML='<div class="empty">Abhi koi labour add nahi hai.</div>';
+  else{
+    box.innerHTML=data.labours.map(l=>{
+      const s=status(l.id);
+      if(s==='present'){p++;w+=l.wage}
+      if(s==='absent')a++;
+      if(s==='half'){p++;w+=l.wage/2}
+      return `<div class="labour">
+        <div class="row">
+          <div><div class="name">${escapeHtml(l.name)}</div><div class="wage">₹${l.wage}/day</div></div>
+          <button class="delete" onclick="removeLabour(${l.id})">Delete</button>
+        </div>
+        <div class="actions">
+          <button class="present ${s==='present'?'selected':''}" onclick="setAtt(${l.id},'present')">✅ Present</button>
+          <button class="absent ${s==='absent'?'selected':''}" onclick="setAtt(${l.id},'absent')">❌ Absent</button>
+          <button class="half ${s==='half'?'selected':''}" onclick="setAtt(${l.id},'half')">½ Half</button>
+        </div>
+      </div>`
+    }).join('');
+  }
+  document.getElementById('present').textContent=p;
+  document.getElementById('absent').textContent=a;
+  document.getElementById('todayWage').textContent='₹'+Math.round(w).toLocaleString('en-IN');
+
+  const wb=document.getElementById('wages');
+  wb.innerHTML=data.labours.length?data.labours.map(l=>{
+    const e=earned(l), pa=paid(l), rem=e-pa;
+    return `<div class="labour">
+      <div class="row"><div><div class="name">${escapeHtml(l.name)}</div>
+      <div class="wage">Earned: ₹${Math.round(e).toLocaleString('en-IN')} &nbsp; | &nbsp; Paid: ₹${Math.round(pa).toLocaleString('en-IN')}</div></div>
+      <b>₹${Math.round(rem).toLocaleString('en-IN')} baki</b></div>
+      <div class="payrow"><input id="pay-${l.id}" type="number" min="0" placeholder="Payment amount ₹">
+      <button class="pay" onclick="payInput(${l.id})">Add Payment</button></div>
+    </div>`
+  }).join(''):'<div class="empty">Wage hisab yahan dikhega.</div>';
+}
+function payInput(id){
+  const el=document.getElementById('pay-'+id),v=Number(el.value);
+  if(!v||v<0)return;
+  data.paid[id]=(data.paid[id]||0)+v; el.value=''; save();render();
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+render();
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>
